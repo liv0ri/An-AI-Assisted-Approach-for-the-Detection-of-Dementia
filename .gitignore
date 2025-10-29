@@ -1,0 +1,7 @@
+specto/
+trans/
+wav/
+diagnosis/
+__pycache__/
+saved_models/
+ckp/
