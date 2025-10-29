@@ -35,8 +35,8 @@ class AdressoDataset(Dataset):
 
         trans_path_ad, trans_path_cn = os.path.join(train_dir, "trans/ad"), os.path.join(train_dir, "trans/cn") # Constructs paths to transcription text files for AD and CN groups.
 
-        files_ad = [fname for fname in os.listdir(data_path_ad) if fname.endswith(".wav")] # Lists all files in the AD audio directory that end with '.png'.
-        files_cn = [fname for fname in os.listdir(data_path_cn) if fname.endswith(".wav")] # Lists all files in the CN audio directory that end with '.png'.
+        files_ad = [fname for fname in os.listdir(data_path_ad) if fname.endswith(".mp3")] # Lists all files in the AD audio directory that end with '.png'.
+        files_cn = [fname for fname in os.listdir(data_path_cn) if fname.endswith(".mp3")] # Lists all files in the CN audio directory that end with '.png'.
 
         specto_files_ad = [os.path.join(specto_path_ad, fname[:-4] + ".png") for fname in files_ad] # Creates full paths for AD spectrogram files.
         specto_files_cn = [os.path.join(specto_path_cn, fname[:-4] + ".png") for fname in files_cn] # Creates full paths for CN spectrogram files.        
@@ -58,7 +58,7 @@ class AdressoDataset(Dataset):
 
         labels_file =  os.path.join(test_dir, "task1.csv" ) # Defines the full path to the test diagnostic labels CSV file.
 
-        all_filen = [fname for fname in os.listdir(data_path) if fname.endswith(".wav")] # Lists all '.png' files in the test audio directory.
+        all_filen = [fname for fname in os.listdir(data_path) if fname.endswith(".mp3")] # Lists all '.png' files in the test audio directory.
         specto_files = [os.path.join(specto_path, fname[:-4] + ".png") for fname in all_filen] 
         trans_files = [os.path.join(trans_path, fname[:-4] + ".txt") for fname in all_filen]
 

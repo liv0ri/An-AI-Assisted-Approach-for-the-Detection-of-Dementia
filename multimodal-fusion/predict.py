@@ -60,10 +60,10 @@ class DementiaPredictor:
 
     def _transcribe_audio(self, audio_bytes_io):
         audio_bytes_io.seek(0)
-        with open("temp.wav", "wb") as f:
+        with open("temp.mp3", "wb") as f:
             f.write(audio_bytes_io.read())
-        result = whisper_model.transcribe("temp.wav")
-        os.remove("temp.wav")
+        result = whisper_model.transcribe("temp.mp3")
+        os.remove("temp.mp3")
         return result["text"]
 
     def _tokenize_transcript(self, transcript_text):

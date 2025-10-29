@@ -3,9 +3,9 @@ import shutil
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-# ======== CONFIG ========
+# ===== CONFIG =====
 output_dir = "diagnosis"
-modalities = ["wav", "specto", "trans"]
+modalities = ["wav", "specto", "trans"]  # source folders
 original_classes = ["control", "dementia"]  # original folder names
 class_map = {"control": "cn", "dementia": "ad"}  # target folder names
 test_csv_name = "task1.csv"
@@ -25,24 +25,21 @@ for cls in original_classes:
             records.append({"participant": pid, "class": cls, "filename": f})
 
 df = pd.DataFrame(records)
+print(f"🎧 Total audio files found: {len(df)}")
 
 # --- split by participant ---
-trainval_ids, test_ids = train_test_split(
-    df["participant"].unique(), test_size=0.2, random_state=42
-)
-train_ids, val_ids = train_test_split(
-    trainval_ids, test_size=0.2, random_state=42
-)
+trainval_ids, test_ids = train_test_split(df["participant"].unique(), test_size=0.2, random_state=42)
+train_ids, val_ids = train_test_split(trainval_ids, test_size=0.2, random_state=42)
 
-# --- helper to copy files for train/val ---
+# --- copy train/val ---
 def copy_train_val(ids, split_name):
     split_dir = os.path.join(output_dir, split_name)
     for m in modalities:
         for target_cls in class_map.values():
-            os.makedirs(os.path.join(split_dir, m, target_cls), exist_ok=True)
+            dest_mod = "audio" if m == "wav" else m  # rename wav → audio
+            os.makedirs(os.path.join(split_dir, dest_mod, target_cls), exist_ok=True)
 
     subset = df[df["participant"].isin(ids)]
-
     for _, row in subset.iterrows():
         fname = row["filename"]
         orig_cls = row["class"]
@@ -52,12 +49,15 @@ def copy_train_val(ids, split_name):
             ext = ".mp3" if modality == "wav" else (".png" if modality == "specto" else ".txt")
             src_cls = orig_cls if modality == "wav" else target_cls
             src = os.path.join(modality, src_cls, fname.replace(".mp3", ext))
-            dest = os.path.join(split_dir, modality, target_cls, os.path.basename(src))
+
+            dest_mod = "audio" if modality == "wav" else modality
+            dest = os.path.join(split_dir, dest_mod, target_cls, os.path.basename(src))
             if os.path.exists(src):
                 shutil.copy(src, dest)
             else:
                 print(f"⚠️ Missing file: {src}")
 
+# --- copy test together and create CSV ---
 def copy_test(ids):
     test_dir = os.path.join(output_dir, "test-dist")
     os.makedirs(test_dir, exist_ok=True)
@@ -73,12 +73,11 @@ def copy_test(ids):
             orig_cls = row["class"]
             label_str = "ProbableAD" if orig_cls == "dementia" else "Control"
 
-            # CSV record only once per file
+            # CSV record only once per file (from audio)
             if modality == "wav":
-                csv_rows.append({"filename": fname, "label": label_str})
+                csv_rows.append({"filename": fname[:-4], "label": label_str})
 
             ext = ".mp3" if modality == "wav" else (".png" if modality == "specto" else ".txt")
-            # use correct source folder
             src_cls = orig_cls if modality == "wav" else class_map[orig_cls]
             src = os.path.join(modality, src_cls, fname.replace(".mp3", ext))
             dest = os.path.join(mod_dir, os.path.basename(src))
@@ -88,12 +87,12 @@ def copy_test(ids):
             else:
                 print(f"⚠️ Missing file: {src}")
 
-    # save CSV
+    # save CSV in test-dist
     csv_path = os.path.join(test_dir, test_csv_name)
     pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
     print(f"✅ Test CSV created at: {csv_path}")
 
-# --- perform copies ---
+# --- run copies ---
 copy_train_val(train_ids, "train")
 copy_train_val(val_ids, "val")
 copy_test(test_ids)
