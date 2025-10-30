@@ -4,6 +4,7 @@ wav/
 diagnosis/
 __pycache__/
 saved_models/
+saved_models1/
 ckp/
 epoch_acc.txt
 losses.txt
