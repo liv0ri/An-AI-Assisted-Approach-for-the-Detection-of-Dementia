@@ -22,7 +22,7 @@ SPECTROGRAM_N_MELS = 224
 # Load Whisper once
 whisper_model = whisper.load_model("base")
 
-class DementiaPredictor:
+class DementiaEvaluator:
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(ROBERTA_MODEL_NAME)
@@ -100,7 +100,7 @@ class DementiaPredictor:
 
 # --- Example ---
 if __name__ == '__main__':
-    predictor = DementiaPredictor()
+    predictor = DementiaEvaluator()
 
     # Generate dummy audio (440 Hz sine wave)
     def generate_dummy_wav_bytes(duration=3, sr=TARGET_SAMPLE_RATE, freq=440):
