@@ -4,6 +4,12 @@ import librosa.display
 import matplotlib.pyplot as plt
 import numpy as np
 
+# Absolute path to the script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+WAV_DIR = os.path.join(BASE_DIR, "..", "wav")
+SPECTRO_DIR = os.path.join(BASE_DIR, "..", "specto")
+
 def wav_to_spectrogram_librosa_with_plot(audio_file, file_name):
     # Load the audio file
     y, sr = librosa.load(audio_file, sr=None)  # sr=None keeps the original sampling rate
@@ -33,5 +39,14 @@ def process_audio_dir_spectro(audio_dir, spectro_dir):
             spectro_path = os.path.join(spectro_dir, fname[:-4] + ".png")
             wav_to_spectrogram_librosa_with_plot(wav_path, spectro_path)
 
-process_audio_dir_spectro("wav/dementia", "specto/ad")
-process_audio_dir_spectro("wav/control", "specto/cn")
+
+# dementia / control folders
+process_audio_dir_spectro(
+    os.path.join(WAV_DIR, "dementia"),
+    os.path.join(SPECTRO_DIR, "ad")
+)
+
+process_audio_dir_spectro(
+    os.path.join(WAV_DIR, "control"),
+    os.path.join(SPECTRO_DIR, "cn")
+)

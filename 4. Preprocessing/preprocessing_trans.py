@@ -11,6 +11,12 @@ model = WhisperForConditionalGeneration.from_pretrained(model_name)
 device = "cuda:0"
 model.to(device)
 
+# Absolute path to the script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+WAV_DIR = os.path.join(BASE_DIR, "..", "wav")
+TRANS_DIR = os.path.join(BASE_DIR, "..", "trans")
+
 def create_transcript(wav_path, save_path, chunk_length_s=30):
     # Load and resample audio to 16kHz
     audio, sr = librosa.load(wav_path, sr=16000)
@@ -57,5 +63,13 @@ def process_audio_dir_transcript(audio_dir, trans_dir):
             trans_path = os.path.join(trans_dir, fname[:-4] + ".txt")
             create_transcript(wav_path, trans_path)
 
-process_audio_dir_transcript("wav/dementia", "trans/ad")
-process_audio_dir_transcript("wav/control", "trans/cn")
+# dementia / control folders
+process_audio_dir_transcript(
+    os.path.join(WAV_DIR, "dementia"),
+    os.path.join(TRANS_DIR, "ad")
+)
+
+process_audio_dir_transcript(
+    os.path.join(WAV_DIR, "control"),
+    os.path.join(TRANS_DIR, "cn")
+)
