@@ -1,0 +1,37 @@
+graph LR
+    %% Entities
+    Patient[Patient]
+    Clinician[Clinician]
+
+    %% Sub-processes
+    subgraph Preprocessing ["1.0 Preprocessing"]
+        direction TB
+        P1_1[("1.1 Spectrogram Gen (Librosa)")]
+        P1_2[("1.2 Transcription (Whisper)")]
+    end
+
+    subgraph Encoders ["2.0 Feature Extraction"]
+        P2_1[("2.1 ViT Encoder")]
+        P2_2[("2.2 RoBERTa Encoder")]
+    end
+
+    subgraph Fusion ["3.0 Fusion & Classification"]
+        direction TB
+        P3_1[("3.1 Cross-Attention (Dual)")]
+        P3_2[("3.2 Mean Pool & Concat")]
+        P3_3[("3.3 Sigmoid Classifier")]
+    end
+
+    %% Flow
+    Patient -- "Raw Audio (MP3)" --> P1_1
+    Patient -- "Raw Audio (MP3)" --> P1_2
+
+    P1_1 -- "Mel-Spectrogram (PNG)" --> P2_1
+    P1_2 -- "Transcript Formula (Txt)" --> P2_2
+
+    P2_1 -- "Image Embeddings" --> P3_1
+    P2_2 -- "Text Embeddings" --> P3_1
+
+    P3_1 -- "Cross-attended Features" --> P3_2
+    P3_2 -- "Fused Vector" --> P3_3
+    P3_3 -- "Dementia Probability (0-1)" --> Clinician

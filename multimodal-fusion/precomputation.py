@@ -22,8 +22,7 @@ img_transform = transforms.Compose([
 
 # Prepare holders
 spectro_tensors = []
-input_ids_list = []
-attention_masks_list = []
+texts = []          # store all transcripts here
 labels_list = []
 file_names = []
 
@@ -39,29 +38,28 @@ for label_str in ["ad", "cn"]:
         img = Image.open(spectro_path).convert('RGB')
         spectro_tensor = img_transform(img)
         spectro_tensors.append(spectro_tensor)
-        
-        # Transcript (tokenize)
+
+        # Read text
         with open(trans_path, 'r', encoding='utf-8') as f:
             text = f.read().strip().replace('\n', ' ')
-        encoding = tokenizer(text, padding='max_length', truncation=True, max_length=256, return_tensors='pt')
-        input_ids_list.append(encoding['input_ids'][0])
-        attention_masks_list.append(encoding['attention_mask'][0])
-        
-        # Label & file names
+            texts.append(text)
+
+        # Label + name
         labels_list.append(label_map[label_str])
         file_names.append(fname)
 
-# Stack as tensors
+# ✅ Tokenize all texts at once
+encodings = tokenizer(texts, padding=True, truncation=True, max_length=256, return_tensors="pt")
+
+# Stack tensors
 spectro_tensors = torch.stack(spectro_tensors)
-input_ids_tensor = torch.stack(input_ids_list)
-attention_masks_tensor = torch.stack(attention_masks_list)
 labels_tensor = torch.tensor(labels_list, dtype=torch.long)
 
-# Save all to file
+# Save to file
 torch.save({
     'spectros': spectro_tensors,
-    'input_ids': input_ids_tensor,
-    'attention_mask': attention_masks_tensor,
+    'input_ids': encodings['input_ids'],
+    'attention_mask': encodings['attention_mask'],
     'labels': labels_tensor,
     'file_names': file_names,
 }, 'precomputed_train.pt')
@@ -81,12 +79,11 @@ with open(labels_csv, newline='') as csvfile:
         labels_dict[row[0]] = label_map[row[1]]
 
 spectro_tensors = []
-input_ids_list = []
-attention_masks_list = []
+texts = []          # reset for test
 labels_list = []
 file_names = []
 
-for fname in tqdm(sorted(os.listdir(spectro_dir))):  # sort for reproducibility
+for fname in tqdm(sorted(os.listdir(spectro_dir))):
     if not fname.endswith('.png'):
         continue
 
@@ -102,24 +99,23 @@ for fname in tqdm(sorted(os.listdir(spectro_dir))):  # sort for reproducibility
     # Transcript (tokenize)
     with open(trans_path, 'r', encoding='utf-8') as f:
         text = f.read().strip().replace('\n', ' ')
-    encoding = tokenizer(text, padding='max_length', truncation=True, max_length=256, return_tensors='pt')
-    input_ids_list.append(encoding['input_ids'][0])
-    attention_masks_list.append(encoding['attention_mask'][0])
-    
-    # Label & file name
+        texts.append(text)
+
+    # Label + name
     labels_list.append(labels_dict[sample_id])
     file_names.append(fname)
 
-# Stack as tensors
+encodings = tokenizer(texts, padding=True, truncation=True, max_length=256, return_tensors="pt")
+
+# Stack tensors
 spectro_tensors = torch.stack(spectro_tensors)
-input_ids_tensor = torch.stack(input_ids_list)
-attention_masks_tensor = torch.stack(attention_masks_list)
 labels_tensor = torch.tensor(labels_list, dtype=torch.long)
 
+# Save to file
 torch.save({
     'spectros': spectro_tensors,
-    'input_ids': input_ids_tensor,
-    'attention_mask': attention_masks_tensor,
+    'input_ids': encodings['input_ids'],
+    'attention_mask': encodings['attention_mask'],
     'labels': labels_tensor,
     'file_names': file_names,
 }, 'precomputed_test.pt')

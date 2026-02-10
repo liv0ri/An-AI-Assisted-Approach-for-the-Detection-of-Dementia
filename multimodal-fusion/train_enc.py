@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 import os
 from tqdm import tqdm
-from data_loader_vit import adresso_loader 
+from cached_adresso_dataset import adresso_loader 
 from bert_image import BertImage 
 import argparse
 
