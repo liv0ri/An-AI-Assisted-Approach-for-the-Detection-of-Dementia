@@ -60,11 +60,11 @@ class Trainer:
             print(f" Saved new best model at epoch {best_epoch} with acc {best_acc:.3f}")
       
     with open("epoch_acc.txt", "w") as ofile:
-      for eacc in self.epoch_accuracies: # Iterates through recorded epoch accuracies.
-        ofile.write(str(eacc) + "\n") # Writes each accuracy to the file, followed by a newline.
+      for num, eacc in enumerate(self.epoch_accuracies): # Iterates through recorded epoch accuracies.
+        ofile.write(f"Epoch {num + 1} accuracy: {eacc}\n") # Writes each accuracy to the file, followed by a newline.
     with open("losses.txt", "w") as ofile:
-      for eloss in self.all_losses: # Iterates through all recorded batch losses.
-        ofile.write(str(eloss) + "\n") # Writes each loss to the file.
+      for num, eloss in enumerate(self.all_losses): # Iterates through all recorded batch losses.
+        ofile.write(f"Epoch {num+1} loss: {eloss} \n") # Writes each loss to the file.
 
   def train_epoch(self): 
     self.model.train() # Sets the model to training mode. 

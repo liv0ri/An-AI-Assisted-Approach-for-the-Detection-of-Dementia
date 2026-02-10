@@ -22,7 +22,8 @@ img_transform = transforms.Compose([
 
 # Prepare holders
 spectro_tensors = []
-texts = []          # store all transcripts here
+# store all transcripts here
+texts = []         
 labels_list = []
 file_names = []
 
@@ -48,7 +49,7 @@ for label_str in ["ad", "cn"]:
         labels_list.append(label_map[label_str])
         file_names.append(fname)
 
-# ✅ Tokenize all texts at once
+# Tokenize all texts at once
 encodings = tokenizer(texts, padding=True, truncation=True, max_length=256, return_tensors="pt")
 
 # Stack tensors
