@@ -6,117 +6,124 @@ from transformers import AutoTokenizer
 from torchvision import transforms
 import csv
 
-# https://chatgpt.com/share/6903659c-c064-8006-9cbb-0e43a3dc39b3
-spectro_dir = 'diagnosis/train/specto/'
-trans_dir = 'diagnosis/train/trans/'
-label_map = {"ad": 1, "cn": 0} 
+def preprocess_multimodal_split(
+    spectro_dir,
+    trans_dir,
+    output_path,
+    tokenizer_name='FacebookAI/roberta-base',
+    label_map=None,
+    labels_csv=None,
+    max_length=256
+):
+    """
+    Precompute spectrogram tensors + tokenized transcripts for train/val/test.
+    Supports:
+      - Folder-based labels (ad/cn)
+      - CSV-based labels (filename -> label)
 
-# Tokenizer & image transforms
-tokenizer = AutoTokenizer.from_pretrained('FacebookAI/roberta-base')
-img_transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-])
+    Saves a .pt file with tensors.
+    """
 
-# Prepare holders
-spectro_tensors = []
-# store all transcripts here
-texts = []         
-labels_list = []
-file_names = []
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
-for label_str in ["ad", "cn"]:
-    folder_path = os.path.join(spectro_dir, label_str)
-    for fname in tqdm(os.listdir(folder_path)):
-        if not fname.endswith('.png'):
-            continue
-        spectro_path = os.path.join(spectro_dir, label_str, fname)
-        trans_path = os.path.join(trans_dir, label_str, fname.replace('.png', '.txt'))
-        
-        # Image
-        img = Image.open(spectro_path).convert('RGB')
-        spectro_tensor = img_transform(img)
-        spectro_tensors.append(spectro_tensor)
+    img_transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+    ])
 
-        # Read text
-        with open(trans_path, 'r', encoding='utf-8') as f:
-            text = f.read().strip().replace('\n', ' ')
-            texts.append(text)
+    spectro_tensors = []
+    texts = []
+    labels_list = []
+    file_names = []
 
-        # Label + name
-        labels_list.append(label_map[label_str])
-        file_names.append(fname)
+    if labels_csv is None:
+        for label_str, label_id in label_map.items():
+            folder_path = os.path.join(spectro_dir, label_str)
 
-# Tokenize all texts at once
-encodings = tokenizer(texts, padding=True, truncation=True, max_length=256, return_tensors="pt")
+            for fname in tqdm(os.listdir(folder_path)):
+                if not fname.endswith('.png'):
+                    continue
 
-# Stack tensors
-spectro_tensors = torch.stack(spectro_tensors)
-labels_tensor = torch.tensor(labels_list, dtype=torch.long)
+                spectro_path = os.path.join(folder_path, fname)
+                trans_path = os.path.join(trans_dir, label_str, fname.replace('.png', '.txt'))
+                # Image
+                img = Image.open(spectro_path).convert('RGB')
+                spectro_tensors.append(img_transform(img))
 
-# Save to file
-torch.save({
-    'spectros': spectro_tensors,
-    'input_ids': encodings['input_ids'],
-    'attention_mask': encodings['attention_mask'],
-    'labels': labels_tensor,
-    'file_names': file_names,
-}, 'precomputed_train.pt')
+                # Read text
+                with open(trans_path, 'r', encoding='utf-8') as f:
+                    texts.append(f.read().strip().replace('\n', ' '))
 
+                labels_list.append(label_id)
+                file_names.append(fname)
+    else:
+        labels_dict = {}
+        with open(labels_csv, newline='') as csvfile:
+            reader = csv.reader(csvfile)
+            next(reader)  # skip header
+            for row in reader:
+                labels_dict[row[0]] = label_map[row[1]]
 
-spectro_dir = 'diagnosis/test-distspecto/'
-trans_dir = 'diagnosis/test-disttrans/'
-labels_csv = 'diagnosis/test-dist/task1.csv'
+        for fname in tqdm(sorted(os.listdir(spectro_dir))):
+            if not fname.endswith('.png'):
+                continue
 
-label_map = {"Control": 0, "ProbableAD": 1}
-labels_dict = {}
-with open(labels_csv, newline='') as csvfile:
-    reader = csv.reader(csvfile)
-    next(reader)  # skip header
-    for row in reader:
-        # row[0] : filename without extension, row[1] : label string
-        labels_dict[row[0]] = label_map[row[1]]
+            sample_id = fname.replace('.png', '')
+            spectro_path = os.path.join(spectro_dir, fname)
+            trans_path = os.path.join(trans_dir, sample_id + '.txt')
 
-spectro_tensors = []
-texts = []          # reset for test
-labels_list = []
-file_names = []
+            # Image
+            img = Image.open(spectro_path).convert('RGB')
+            spectro_tensors.append(img_transform(img))
 
-for fname in tqdm(sorted(os.listdir(spectro_dir))):
-    if not fname.endswith('.png'):
-        continue
+            with open(trans_path, 'r', encoding='utf-8') as f:
+                texts.append(f.read().strip().replace('\n', ' '))
 
-    sample_id = fname.replace('.png', '')
-    spectro_path = os.path.join(spectro_dir, fname)
-    trans_path = os.path.join(trans_dir, sample_id + '.txt')
+            labels_list.append(labels_dict[sample_id])
+            file_names.append(fname)
 
-    # Image
-    img = Image.open(spectro_path).convert('RGB')
-    spectro_tensor = img_transform(img)
-    spectro_tensors.append(spectro_tensor)
-    
-    # Transcript (tokenize)
-    with open(trans_path, 'r', encoding='utf-8') as f:
-        text = f.read().strip().replace('\n', ' ')
-        texts.append(text)
+    encodings = tokenizer(
+        texts,
+        padding=True,
+        truncation=True,
+        max_length=max_length,
+        return_tensors="pt"
+    )
 
-    # Label + name
-    labels_list.append(labels_dict[sample_id])
-    file_names.append(fname)
+    # Stack tenspr
+    spectro_tensors = torch.stack(spectro_tensors)
+    labels_tensor = torch.tensor(labels_list, dtype=torch.long)
 
-encodings = tokenizer(texts, padding=True, truncation=True, max_length=256, return_tensors="pt")
+    torch.save({
+        'spectros': spectro_tensors,
+        'input_ids': encodings['input_ids'],
+        'attention_mask': encodings['attention_mask'],
+        'labels': labels_tensor,
+        'file_names': file_names,
+    }, output_path)
 
-# Stack tensors
-spectro_tensors = torch.stack(spectro_tensors)
-labels_tensor = torch.tensor(labels_list, dtype=torch.long)
+    print(f"Saved precomputed data to → {output_path}")
 
-# Save to file
-torch.save({
-    'spectros': spectro_tensors,
-    'input_ids': encodings['input_ids'],
-    'attention_mask': encodings['attention_mask'],
-    'labels': labels_tensor,
-    'file_names': file_names,
-}, 'precomputed_test.pt')
+preprocess_multimodal_split(
+    spectro_dir='diagnosis/train/specto/',
+    trans_dir='diagnosis/train/trans/',
+    output_path='precomputed_train.pt',
+    label_map={"ad": 1, "cn": 0}
+)
+
+preprocess_multimodal_split(
+    spectro_dir='diagnosis/val/specto/',
+    trans_dir='diagnosis/val/trans/',
+    output_path='precomputed_val.pt',
+    label_map={"ad": 1, "cn": 0}
+)
+
+preprocess_multimodal_split(
+    spectro_dir='diagnosis/test-distspecto/',
+    trans_dir='diagnosis/test-disttrans/',
+    output_path='precomputed_test.pt',
+    labels_csv='diagnosis/test-dist/task1.csv',
+    label_map={"Control": 0, "ProbableAD": 1}
+)
