@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.so
+*.ipynb_checkpoints
+
+processed_data.pkl
+precomputed_both_audio_features.npy
+
+# Model checkpoints and logs
+models/
+*.keras
+*.h5
+*.ckpt
+*.pb
+*.tflite
+logs/
+pitt_split/
+pitt_split1/
+embeddings/
+# PyTorch cache
+*.pt
+*.pth
+
+# Mac & Linux
+.DS_Store
+
+# Windows
+Thumbs.db
+
+diagnosis/
