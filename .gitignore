@@ -6,4 +6,3 @@ __pycache__/
 saved_models/
 ckp/
 precomputed_train.pt
-precomputed_test.pt

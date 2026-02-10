@@ -23,6 +23,9 @@ def preprocess_multimodal_split(
 
     Saves a .pt file with tensors.
     """
+    output_dir = "5. Dementia Model"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, output_path)
 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
