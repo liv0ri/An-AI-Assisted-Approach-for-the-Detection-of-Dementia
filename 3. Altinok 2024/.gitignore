@@ -1,28 +1,7 @@
-# Python
-__pycache__/
 # Model checkpoints and logs
 multimodal-fusion/saved_models/
-multimodal-fusion/ckp/
 multimodal-fusion-using-mmse/saved_models/
-multimodal-fusion-using-mmse/ckp/
 multimodal-fusion-multi/saved_models/
-multimodal-fusion-multi/ckp/
 
 diagnosis/
 diagnosis/test-dist/
-
-*.so
-*.ipynb_checkpoints
-*.keras
-*.h5
-*.pb
-*.tflite
-*.txt
-# PyTorch cache
-*.pt
-*.pth
-
-# Mac & Linux
-.DS_Store
-# Windows
-Thumbs.db
