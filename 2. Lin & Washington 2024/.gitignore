@@ -5,5 +5,3 @@ processed_data.pkl
 precomputed_both_audio_features.npy
 
 pitt_split1/
-
-diagnosis/
