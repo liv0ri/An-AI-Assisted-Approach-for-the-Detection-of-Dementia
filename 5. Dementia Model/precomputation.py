@@ -5,6 +5,7 @@ from PIL import Image
 from transformers import AutoTokenizer
 from torchvision import transforms
 import csv
+from config import output_dir, test_csv_name
 
 def preprocess_multimodal_split(
     spectro_dir,
@@ -15,14 +16,6 @@ def preprocess_multimodal_split(
     labels_csv=None,
     max_length=256
 ):
-    """
-    Precompute spectrogram tensors + tokenized transcripts for train/val/test.
-    Supports:
-      - Folder-based labels (ad/cn)
-      - CSV-based labels (filename -> label)
-
-    Saves a .pt file with tensors.
-    """
     output_dir = "5. Dementia Model"
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, output_path)
@@ -129,23 +122,23 @@ def preprocess_multimodal_split(
     print(f"Saved precomputed data to → {output_path}")
 
 preprocess_multimodal_split(
-    spectro_dir='diagnosis/train/specto/',
-    trans_dir='diagnosis/train/trans/',
+    spectro_dir=f'{output_dir}/train/specto/',
+    trans_dir=f'{output_dir}/train/trans/',
     output_path='precomputed_train.pt',
     label_map={"ad": 1, "cn": 0}
 )
 
 preprocess_multimodal_split(
-    spectro_dir='diagnosis/val/specto/',
-    trans_dir='diagnosis/val/trans/',
+    spectro_dir=f'{output_dir}/val/specto/',
+    trans_dir=f'{output_dir}/val/trans/',
     output_path='precomputed_val.pt',
     label_map={"ad": 1, "cn": 0}
 )
 
 preprocess_multimodal_split(
-    spectro_dir='diagnosis/test-distspecto/',
-    trans_dir='diagnosis/test-disttrans/',
+    spectro_dir=f'{output_dir}/test-distspecto/',
+    trans_dir=f'{output_dir}/test-disttrans/',
     output_path='precomputed_test.pt',
-    labels_csv='diagnosis/test-dist/task1.csv',
+    labels_csv=f'{output_dir}/test-dist/{test_csv_name}',
     label_map={"Control": 0, "ProbableAD": 1}
 )

@@ -14,7 +14,7 @@ class CachedAdressoDataset(Dataset):
     def __init__(self, phase):
         assert phase in CACHE_FILES, f"Invalid phase: {phase}"
         cache_path = CACHE_FILES[phase]
-        print(f"🔹 Loading cached dataset: {cache_path}")
+        print(f"Loading cached dataset: {cache_path}")
         data = torch.load(cache_path)
 
         self.spectros = data['spectros']

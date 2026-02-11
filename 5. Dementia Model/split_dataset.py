@@ -12,7 +12,7 @@ def get_participant_id(filename):
 # collect participants 
 records = []
 for cls in original_classes:
-    audio_folder = os.path.join("wav", cls)
+    audio_folder = os.path.join(f"{modalities[0]}", cls)
     for f in os.listdir(audio_folder):
         if f.endswith(".mp3"):
             pid = get_participant_id(f)
@@ -30,7 +30,7 @@ def copy_train_val(ids, split_name):
     split_dir = os.path.join(output_dir, split_name)
     for m in modalities:
         for target_cls in class_map.values():
-            dest_mod = "audio" if m == "wav" else m  
+            dest_mod = "audio" if m == f"{modalities[0]}" else m  
             os.makedirs(os.path.join(split_dir, dest_mod, target_cls), exist_ok=True)
 
     subset = df[df["participant"].isin(ids)]
@@ -40,11 +40,11 @@ def copy_train_val(ids, split_name):
         target_cls = class_map[orig_cls]
 
         for modality in modalities:
-            ext = ".mp3" if modality == "wav" else (".png" if modality == "specto" else ".txt")
-            src_cls = orig_cls if modality == "wav" else target_cls
+            ext = ".mp3" if modality == f"{modalities[0]}" else (".png" if modality == "specto" else ".txt")
+            src_cls = orig_cls if modality == f"{modalities[0]}" else target_cls
             src = os.path.join(modality, src_cls, fname.replace(".mp3", ext))
 
-            dest_mod = "audio" if modality == "wav" else modality
+            dest_mod = "audio" if modality == f"{modalities[0]}" else modality
             dest = os.path.join(split_dir, dest_mod, target_cls, os.path.basename(src))
             if os.path.exists(src):
                 shutil.copy(src, dest)
@@ -58,21 +58,21 @@ def copy_test(ids):
     csv_rows = []
 
     for modality in modalities:
-        mod_dir = os.path.join(output_dir, f"test-distaudio") if modality == "wav" else os.path.join(output_dir, f"test-dist{modality}")
+        mod_dir = os.path.join(output_dir, f"test-distaudio") if modality == f"{modalities[0]}" else os.path.join(output_dir, f"test-dist{modality}")
         os.makedirs(mod_dir, exist_ok=True)
 
         subset = df[df["participant"].isin(ids)]
         for _, row in subset.iterrows():
             fname = row["filename"]
             orig_cls = row["class"]
-            label_str = "ProbableAD" if orig_cls == "dementia" else "Control"
+            label_str = "ProbableAD" if orig_cls == f"{original_classes[1]}" else "Control" 
 
             # CSV record only once per file 
-            if modality == "wav":
+            if modality == f"{modalities[0]}":
                 csv_rows.append({"filename": fname[:-4], "label": label_str})
 
-            ext = ".mp3" if modality == "wav" else (".png" if modality == "specto" else ".txt")
-            src_cls = orig_cls if modality == "wav" else class_map[orig_cls]
+            ext = ".mp3" if modality == f"{modalities[0]}" else (".png" if modality == "specto" else ".txt")
+            src_cls = orig_cls if modality == f"{modalities[0]}" else class_map[orig_cls]
             src = os.path.join(modality, src_cls, fname.replace(".mp3", ext))
             dest = os.path.join(mod_dir, os.path.basename(src))
 

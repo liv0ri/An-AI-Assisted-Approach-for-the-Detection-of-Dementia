@@ -5,6 +5,7 @@ from torchvision import transforms
 from transformers import AutoTokenizer
 import csv, os
 from sklearn.utils import shuffle
+from config import output_dir, test_csv_name
 tokenizer = AutoTokenizer.from_pretrained('FacebookAI/roberta-base')
 
 transform_list = transforms.Compose([ 
@@ -24,7 +25,7 @@ def parse_labels_test(scores_file):
       mdict[row[0]] = ldict[row[1]] # Assigns the numerical label based on the string label in the second column to the key from the first column.
   return mdict 
 
-base_dir = "../diagnosis/" 
+base_dir = f"../{output_dir}/" 
 class AdressoDataset(Dataset): 
     def __init__(self, phase): 
       if phase == "train": 
@@ -48,7 +49,7 @@ class AdressoDataset(Dataset):
         specto_filen = specto_files_ad + specto_files_cn # Combines the lists of AD and CN spectrogram file paths.
         trans_filen =  trans_files_ad + trans_files_cn # Combines the lists of AD and CN transcription file paths.
 
-        self.all_filen, self.specto_filen, self.trans_filen, self.labels = shuffle(all_filen, specto_filen, trans_filen, labels, random_state=44) # Shuffles all corresponding lists (filenames, spectrogram paths, transcription paths, labels, MMSE scores) consistently using a fixed random_state for reproducibility.
+        self.all_filen, self.specto_filen, self.trans_filen, self.labels = shuffle(all_filen, specto_filen, trans_filen, labels, random_state=44)
 
       elif phase  == "test":
         test_dir = os.path.join(base_dir, "test-dist") # Constructs the full path to the distributed test data directory.
@@ -56,7 +57,7 @@ class AdressoDataset(Dataset):
         specto_path = os.path.join(test_dir + "specto/") # Constructs path to spectrogram image files in the test set.
         trans_path = os.path.join(test_dir + "trans/") # Constructs path to transcription text files in the test set.
 
-        labels_file =  os.path.join(test_dir, "task1.csv" ) # Defines the full path to the test diagnostic labels CSV file.
+        labels_file =  os.path.join(test_dir, f"{test_csv_name}" ) # Defines the full path to the test diagnostic labels CSV file.
 
         all_filen = [fname for fname in os.listdir(data_path) if fname.endswith(".mp3")] # Lists all '.png' files in the test audio directory.
         specto_files = [os.path.join(specto_path, fname[:-4] + ".png") for fname in all_filen] 
@@ -109,5 +110,5 @@ def variable_batcher(batch):
   return item
 
 def adresso_loader(phase, batch_size, shuffle=False):
-  dataset = AdressoDataset(phase) # Creates an instance of the AdressoDataset for the specified phase.
+  dataset = AdressoDataset(phase)
   return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=variable_batcher) 

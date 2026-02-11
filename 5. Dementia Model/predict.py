@@ -1,122 +1,141 @@
 import os
-import io
-import wave
-import numpy as np
-import cv2
-import librosa
-import whisper
 import torch
-from transformers import AutoTokenizer
-from PIL import Image        
-from torchvision import transforms
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc, precision_recall_curve
+import seaborn as sns
+from tqdm import tqdm
+
+from cached_adresso_dataset import adresso_loader
 from bert_image import BertImage
 
+# Configuration
 MODEL_PATH = 'saved_models/best_model.pth'
 ROBERTA_MODEL_NAME = "FacebookAI/roberta-base"
-N_FINETUNE = 4
-MAX_LENGTH = 512
+BATCH_SIZE = 32
 PROBABILITY_THRESHOLD = 0.5
-TARGET_SAMPLE_RATE = 16000
-SPECTROGRAM_N_MELS = 224
+CONF_MATRIX_FILE = 'confusion_matrix.png'
+ROC_CURVE_FILE = 'roc_curve.png'
+PR_CURVE_FILE = 'precision_recall_curve.png'
 
-# Load Whisper once
-whisper_model = whisper.load_model("base")
-
-class DementiaPredictor:
-    def __init__(self):
+class ModelEvaluator:
+    def __init__(self, model_path=MODEL_PATH, batch_size=BATCH_SIZE):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.tokenizer = AutoTokenizer.from_pretrained(ROBERTA_MODEL_NAME)
-        self.model = BertImage(nfinetune=N_FINETUNE)
-        self._load_model()
-        self.model.eval().to(self.device)
+        self.model_path = model_path
+        self.batch_size = batch_size
+        self.model = None
+
+    def load_model(self):
+        if not os.path.exists(self.model_path):
+            raise FileNotFoundError(f"Model file not found: {self.model_path}")
+            
+        print(f"Loading model from {self.model_path}...")
         
-        # Same preprocessing as training
-        self.transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-        ])
-
-    def _load_model(self):
-        if not os.path.exists(MODEL_PATH):
-            raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
-        state_dict = torch.load(MODEL_PATH, map_location=self.device)
-        new_state_dict = {k[7:] if k.startswith('module.') else k: v for k, v in state_dict.items()}
+        # Initialize model structure (nfinetune doesn't matter for evaluation as we load weights)
+        self.model = BertImage(nfinetune=0) 
+        
+        # Load state dictionary
+        state_dict = torch.load(self.model_path, map_location=self.device)
+        
+        # Handle DataParallel prefix if present (remove 'module.')
+        new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+        
         self.model.load_state_dict(new_state_dict)
-        print(f" Model weights loaded from {MODEL_PATH}")
+        self.model.to(self.device)
+        self.model.eval()
+        print("Model loaded successfully.")
 
-    def _process_audio_to_spectrogram(self, audio_bytes_io):
-        y, sr = librosa.load(audio_bytes_io, sr=TARGET_SAMPLE_RATE)
-        S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=SPECTROGRAM_N_MELS)
-        S_dB = librosa.power_to_db(S, ref=np.max)
-
-        # Normalize to 0–255
-        S_img = ((S_dB - S_dB.min()) / (S_dB.max() - S_dB.min()) * 255).astype(np.uint8)
-        S_img = cv2.merge([S_img, S_img, S_img]) 
-        pil_image = Image.fromarray(S_img)
-
-        return self.transform(pil_image).unsqueeze(0).to(self.device)
-
-    def _transcribe_audio(self, audio_bytes_io):
-        audio_bytes_io.seek(0)
-        with open("temp.mp3", "wb") as f:
-            f.write(audio_bytes_io.read())
-        result = whisper_model.transcribe("temp.mp3")
-        os.remove("temp.mp3")
-        return result["text"]
-
-    def _tokenize_transcript(self, transcript_text):
-        encoded = self.tokenizer(
-            transcript_text,
-            padding='max_length',
-            truncation=True,
-            return_tensors='pt',
-            max_length=MAX_LENGTH
-        )
-        return (encoded['input_ids'].to(self.device), encoded['attention_mask'].to(self.device))
-
-    def predict(self, audio_data, transcript_text=None):
-        audio_bytes_io = io.BytesIO(audio_data)
-        pixels_tensor = self._process_audio_to_spectrogram(audio_bytes_io)
-
-        if not transcript_text:
-            transcript_text = self._transcribe_audio(audio_bytes_io)
-
-        input_ids, attn_mask = self._tokenize_transcript(transcript_text)
-
+    def evaluate(self, phase='test'):
+        print(f"Starting evaluation on '{phase}' set...")
+        
+        loader = adresso_loader(phase=phase, batch_size=self.batch_size, shuffle=False)
+        
+        y_true = []
+        y_probs = []
+        
         with torch.no_grad():
-            prediction = self.model(pixels_tensor, input_ids, attn_mask)
-            prob = prediction.item()
-            label = 1 if prob >= PROBABILITY_THRESHOLD else 0
+            for batch in tqdm(loader, desc="Evaluating"):
+                pixels = batch['pixels'].to(self.device)
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['labels'].to(self.device) # Keep as tensor initially
+                
+                # Forward pass
+                outputs = self.model(pixels, input_ids, attention_mask)
+                
+                # Store results
+                # Flatten strictly ensures 1D array
+                y_probs.extend(outputs.cpu().numpy().flatten())
+                y_true.extend(labels.cpu().numpy().flatten())
+                
+        return np.array(y_true), np.array(y_probs)
 
-        return {
-            'prediction_probability': round(prob, 4),
-            'prediction_label': label,
-            'label_text': 'Dementia' if label == 1 else 'NonDementia',
-            'transcript': transcript_text
-        }
+    def plot_confusion_matrix(self, y_true, y_pred, save_path=CONF_MATRIX_FILE):
+        cm = confusion_matrix(y_true, y_pred)
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                    xticklabels=['Control', 'Dementia'], 
+                    yticklabels=['Control', 'Dementia'])
+        plt.ylabel('True Label')
+        plt.xlabel('Predicted Label')
+        plt.title('Confusion Matrix')
+        plt.tight_layout()
+        plt.savefig(save_path)
+        print(f"Confusion matrix saved to {save_path}")
+        plt.close()
 
+    def plot_roc_curve(self, y_true, y_probs, save_path=ROC_CURVE_FILE):
+        fpr, tpr, _ = roc_curve(y_true, y_probs)
+        roc_auc = auc(fpr, tpr)
+        
+        plt.figure(figsize=(8, 6))
+        plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic')
+        plt.legend(loc="lower right")
+        plt.tight_layout()
+        plt.savefig(save_path)
+        print(f"ROC curve saved to {save_path}")
+        plt.close()
 
-# --- Example ---
-if __name__ == '__main__':
-    predictor = DementiaPredictor()
+    def plot_precision_recall_curve(self, y_true, y_probs, save_path=PR_CURVE_FILE):
+        val_precision, val_recall, _ = precision_recall_curve(y_true, y_probs)
+        
+        plt.figure(figsize=(8, 6))
+        plt.plot(val_recall, val_precision, color='blue', lw=2, label='Precision-Recall curve')
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title('Precision-Recall Curve')
+        plt.legend(loc="lower left")
+        plt.tight_layout()
+        plt.savefig(save_path)
+        print(f"Precision-Recall curve saved to {save_path}")
+        plt.close()
 
-    # Generate dummy audio (440 Hz sine wave)
-    def generate_dummy_wav_bytes(duration=3, sr=TARGET_SAMPLE_RATE, freq=440):
-        t = np.linspace(0, duration, int(sr * duration), endpoint=False)
-        waveform = 0.5 * np.sin(2 * np.pi * freq * t)
-        waveform_int16 = (waveform * 32767).astype(np.int16)
-
-        byte_io = io.BytesIO()
-        with wave.open(byte_io, 'wb') as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(sr)
-            wf.writeframes(waveform_int16.tobytes())
-        byte_io.seek(0)
-        return byte_io.getvalue()
-
-    dummy_audio = generate_dummy_wav_bytes()
-    result = predictor.predict(dummy_audio)
-    print(result)
+if __name__ == "__main__":
+    # Initialize and run evaluation
+    evaluator = ModelEvaluator()
+    evaluator.load_model()
+    
+    # Get predictions
+    y_true, y_probs = evaluator.evaluate(phase='test')
+    
+    # Convert probabilities to binary predictions
+    y_pred = (y_probs >= PROBABILITY_THRESHOLD).astype(int)
+    
+    # Print metrics
+    print("\n" + "="*40)
+    print("       Evaluation Report")
+    print("="*40)
+    print(classification_report(y_true, y_pred, target_names=['Control', 'Dementia']))
+    
+    # Generate Plots
+    print("\nGenerating plots...")
+    evaluator.plot_confusion_matrix(y_true, y_pred)
+    evaluator.plot_roc_curve(y_true, y_probs)
+    evaluator.plot_precision_recall_curve(y_true, y_probs)
+    print("\nDone! Plots saved locally.")
