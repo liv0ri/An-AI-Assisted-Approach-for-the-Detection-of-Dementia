@@ -6,7 +6,7 @@ tokenizer = AutoTokenizer.from_pretrained('FacebookAI/roberta-base')
 
 CACHE_FILES = {
     "train": "precomputed_train.pt",
-    # "val": "precomputed_train.pt",  
+    "val": "precomputed_val.pt",  
     "test": "precomputed_test.pt"
 }
 
