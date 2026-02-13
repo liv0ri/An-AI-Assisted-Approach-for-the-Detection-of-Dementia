@@ -43,12 +43,12 @@ def variable_batcher(batch):
         'labels': torch.stack([item['labels'] for item in batch])
     }
 
-def adresso_loader(phase, batch_size, shuffle=False):
+def adresso_loader(phase, batch_size):
     dataset = CachedAdressoDataset(phase)
     return DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=shuffle if phase == "train" else False,
+        shuffle=True if phase == "train" else False,
         collate_fn=variable_batcher,
         num_workers=4,
         pin_memory=True

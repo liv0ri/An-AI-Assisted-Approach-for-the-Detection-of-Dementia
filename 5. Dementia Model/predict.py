@@ -48,7 +48,7 @@ class ModelEvaluator:
     def evaluate(self, phase='test'):
         print(f"Starting evaluation on '{phase}' set...")
         
-        loader = adresso_loader(phase=phase, batch_size=self.batch_size, shuffle=False)
+        loader = adresso_loader(phase=phase, batch_size=self.batch_size)
         
         y_true = []
         y_probs = []

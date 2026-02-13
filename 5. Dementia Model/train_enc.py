@@ -20,7 +20,7 @@ class Trainer:
     torch.cuda.manual_seed(args.seed) # Sets the seed for PyTorch's CUDA random number generator for reproducibility.
     np.random.seed(args.seed) # Sets the seed for NumPy's random number generator for reproducibility.
 
-    train_loader = adresso_loader(phase='train', batch_size=args.batch_size, shuffle=True) 
+    train_loader = adresso_loader(phase='train', batch_size=args.batch_size) 
     test_loader = adresso_loader(phase='test', batch_size=args.val_batch_size) 
 
     if torch.cuda.device_count() > 0:
