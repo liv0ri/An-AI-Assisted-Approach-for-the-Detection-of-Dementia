@@ -12,11 +12,11 @@ CACHE_FILES = {
 }
 
 class CachedAdressoDataset(Dataset):
-    def __init__(self, phase):
+    def __init__(self, phase, base_path=""):
         assert phase in CACHE_FILES, f"Invalid phase: {phase}"
         cache_path = CACHE_FILES[phase]
         print(f"Loading cached dataset: {cache_path}")
-        cache_full_path = os.path.join('5. Dementia Model', cache_path)
+        cache_full_path = os.path.join(base_path, cache_path)
         data = torch.load(cache_full_path)
 
         self.spectros = data['spectros']
@@ -52,8 +52,8 @@ def variable_batcher(batch):
         out['file_names'] = [item['file_names'] for item in batch]
     return out
 
-def adresso_loader(phase, batch_size):
-    dataset = CachedAdressoDataset(phase)
+def adresso_loader(phase, batch_size, base_path=""):
+    dataset = CachedAdressoDataset(phase, base_path=base_path)
     return DataLoader(
         dataset,
         batch_size=batch_size,
