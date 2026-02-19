@@ -58,11 +58,11 @@ class ModelEvaluator:
     def evaluate(self, phase='test'):
         print(f"Starting evaluation on '{phase}' set...")
         
-        loader = adresso_loader(phase=phase, batch_size=self.batch_size)
+        loader = adresso_loader(phase=phase, batch_size=self.batch_size, base_path="5. Dementia Model")
         
         y_true = []
         y_probs = []
-        records = []  # store per-sample details
+        records = []  
         
         with torch.no_grad():
             for batch in tqdm(loader, desc="Evaluating"):
@@ -149,8 +149,9 @@ class ModelEvaluator:
         print(f"ROC curve saved to {save_path}")
         plt.close()
 
-    def plot_precision_recall_curve(self, y_true, y_probs, pr_auc, save_path=PR_CURVE_FILE):
+    def plot_precision_recall_curve(self, y_true, y_probs, save_path=PR_CURVE_FILE):
         val_precision, val_recall, _ = precision_recall_curve(y_true, y_probs)
+        pr_auc = auc(val_recall, val_precision)
         
         plt.figure(figsize=(8, 6))
         plt.plot(val_recall, val_precision, color='blue', lw=2, label=f'Precision-Recall curve (AUC = {pr_auc:.2f})')
@@ -188,15 +189,10 @@ if __name__ == "__main__":
     print("\n" + "="*80)
     macro_f1 = f1_score(y_true, y_pred, average='macro')
     print(f"Macro F1 Score: {macro_f1:.4f}")
-
-    # PR-AUC 
-    print("\n" + "="*80)
-    pr_auc = average_precision_score(y_true, y_probs)
-    print(f"PR-AUC (Average Precision): {pr_auc:.4f}")
     
     # Generate Plots
     print("\nGenerating plots...")
     evaluator.plot_confusion_matrix(y_true, y_pred)
     evaluator.plot_roc_curve(y_true, y_probs)
-    evaluator.plot_precision_recall_curve(y_true, y_probs, pr_auc)
+    evaluator.plot_precision_recall_curve(y_true, y_probs)
     print("\nDone! Plots saved locally.")
