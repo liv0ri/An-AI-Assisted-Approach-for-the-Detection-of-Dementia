@@ -94,17 +94,19 @@ class ModelEvaluator:
                         "correct": pred_label == true_label
                     })
 
+                    if pred_label != true_label:
+                        img = pixels[i].cpu().permute(1, 2, 0).numpy()
+                        img = (img - img.min()) / (img.max() - img.min() + 1e-8)
+                        img = (img * 255).astype(np.uint8)
+                        plt.imsave(
+                            os.path.join(save_dir, f"misclassified_{file_names[i]}"),
+                            img,
+                            cmap="viridis"
+                        )
+
         df = pd.DataFrame(records)
         df.to_csv(os.path.join(save_dir, "evaluation_details.csv"), index=False)
         print("Saved evaluation_details.csv")
-        if pred_label != true_label:
-            img = pixels[i].cpu().permute(1, 2, 0).numpy()
-            plt.imsave(
-                os.path.join(save_dir, f"misclassified_{file_names[i]}"),
-                img,
-                cmap="viridis"
-            )
-
 
         return np.array(y_true), np.array(y_probs)
 
