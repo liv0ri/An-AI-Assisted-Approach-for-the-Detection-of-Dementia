@@ -31,6 +31,7 @@ def preprocess_multimodal_split(
 
     spectro_tensors = []
     texts = []
+    raw_texts = []
     labels_list = []
     file_names = []
 
@@ -57,7 +58,9 @@ def preprocess_multimodal_split(
                 # Read text
                 with open(trans_path, 'r', encoding='utf-8') as f:
                     # Remove newlines and extra spaces
-                    texts.append(f.read().strip().replace('\n', ' '))
+                    text = f.read()
+                    texts.append(text.strip().replace('\n', ' '))
+                    raw_texts.append(text)
 
                 # Label + name
                 labels_list.append(label_id)
@@ -92,7 +95,9 @@ def preprocess_multimodal_split(
 
             # Read text
             with open(trans_path, 'r', encoding='utf-8') as f:
-                texts.append(f.read().strip().replace('\n', ' '))
+                text = f.read()
+                texts.append(text.strip().replace('\n', ' '))
+                raw_texts.append(text)
 
             # Label + name
             labels_list.append(labels_dict[sample_id])
@@ -117,6 +122,7 @@ def preprocess_multimodal_split(
         'attention_mask': encodings['attention_mask'],
         'labels': labels_tensor,
         'file_names': file_names,
+        'raw_texts': raw_texts
     }, output_path)
 
     print(f"Saved precomputed data to → {output_path}")
