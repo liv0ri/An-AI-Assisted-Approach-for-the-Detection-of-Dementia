@@ -5,18 +5,22 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc, precision_recall_curve
 import seaborn as sns
 from tqdm import tqdm
+import pandas as pd
 
 from cached_adresso_dataset import adresso_loader
 from bert_image import BertImage
 
 # Configuration
 MODEL_PATH = 'saved_models/best_model.pth'
+MODEL_PATH = os.path.join('5. Dementia Model', MODEL_PATH)
 ROBERTA_MODEL_NAME = "FacebookAI/roberta-base"
 BATCH_SIZE = 32
+# expriment with different threshold values to optimize performance IMPOOO
 PROBABILITY_THRESHOLD = 0.5
 CONF_MATRIX_FILE = 'confusion_matrix.png'
 ROC_CURVE_FILE = 'roc_curve.png'
 PR_CURVE_FILE = 'precision_recall_curve.png'
+save_dir = r"D:\Uni\thesis final\Other\b. Diagram of Evaluation"
 
 class ModelEvaluator:
     def __init__(self, model_path=MODEL_PATH, batch_size=BATCH_SIZE):
@@ -24,6 +28,7 @@ class ModelEvaluator:
         self.model_path = model_path
         self.batch_size = batch_size
         self.model = None
+        os.makedirs(save_dir, exist_ok=True)
 
     def load_model(self):
         if not os.path.exists(self.model_path):
@@ -52,23 +57,52 @@ class ModelEvaluator:
         
         y_true = []
         y_probs = []
+        records = []  # store per-sample details
         
         with torch.no_grad():
             for batch in tqdm(loader, desc="Evaluating"):
                 pixels = batch['pixels'].to(self.device)
                 input_ids = batch['input_ids'].to(self.device)
                 attention_mask = batch['attention_mask'].to(self.device)
-                labels = batch['labels'].to(self.device) # Keep as tensor initially
+                labels = batch['labels'].cpu().numpy()
                 
-                # Forward pass
+                transcripts = batch.get('raw_texts', [''] * len(labels))
+                file_names = batch.get('file_names', ['unknown'] * len(labels))
+
                 outputs = self.model(pixels, input_ids, attention_mask)
-                
-                # Store results
-                # Flatten strictly ensures 1D array
-                y_probs.extend(outputs.cpu().numpy().flatten())
-                y_true.extend(labels.cpu().numpy().flatten())
-                
+                probs = outputs.squeeze().cpu().numpy()
+
+                for i in range(len(probs)):
+                    prob = float(probs[i])
+                    true_label = int(labels[i])
+                    pred_label = int(prob >= PROBABILITY_THRESHOLD)
+
+                    y_probs.append(prob)
+                    y_true.append(true_label)
+
+                    records.append({
+                        "file_name": file_names[i],
+                        "transcript": transcripts[i],
+                        "true_label": true_label,
+                        "predicted_label": pred_label,
+                        "probability": round(prob, 4),
+                        "correct": pred_label == true_label
+                    })
+
+        df = pd.DataFrame(records)
+        df.to_csv(os.path.join(save_dir, "evaluation_details.csv"), index=False)
+        print("Saved evaluation_details.csv")
+        if pred_label != true_label:
+            img = pixels[i].cpu().permute(1, 2, 0).numpy()
+            plt.imsave(
+                os.path.join(save_dir, f"misclassified_{file_names[i]}"),
+                img,
+                cmap="viridis"
+            )
+
+
         return np.array(y_true), np.array(y_probs)
+
 
     def plot_confusion_matrix(self, y_true, y_pred, save_path=CONF_MATRIX_FILE):
         cm = confusion_matrix(y_true, y_pred)
@@ -80,7 +114,11 @@ class ModelEvaluator:
         plt.xlabel('Predicted Label')
         plt.title('Confusion Matrix')
         plt.tight_layout()
-        plt.savefig(save_path)
+        plt.savefig(
+            os.path.join(save_dir, save_path),
+            dpi=300,
+            bbox_inches="tight"
+        )
         print(f"Confusion matrix saved to {save_path}")
         plt.close()
 
@@ -98,7 +136,11 @@ class ModelEvaluator:
         plt.title('Receiver Operating Characteristic')
         plt.legend(loc="lower right")
         plt.tight_layout()
-        plt.savefig(save_path)
+        plt.savefig(
+            os.path.join(save_dir, save_path),
+            dpi=300,
+            bbox_inches="tight"
+        )
         print(f"ROC curve saved to {save_path}")
         plt.close()
 
@@ -112,7 +154,11 @@ class ModelEvaluator:
         plt.title('Precision-Recall Curve')
         plt.legend(loc="lower left")
         plt.tight_layout()
-        plt.savefig(save_path)
+        plt.savefig(
+            os.path.join(save_dir, save_path),
+            dpi=300,
+            bbox_inches="tight"
+        )
         print(f"Precision-Recall curve saved to {save_path}")
         plt.close()
 
