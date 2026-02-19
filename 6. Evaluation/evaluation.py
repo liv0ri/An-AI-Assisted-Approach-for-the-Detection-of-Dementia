@@ -1,4 +1,5 @@
 import os
+import sys
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,6 +8,10 @@ import seaborn as sns
 from tqdm import tqdm
 import pandas as pd
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+MODEL_DIR = os.path.join(PROJECT_ROOT, "5. Dementia Model")
+
+sys.path.append(MODEL_DIR)
 from cached_adresso_dataset import adresso_loader
 from bert_image import BertImage
 
