@@ -30,7 +30,7 @@ torch.save(merged, out_path)
 print(f"Saved merged dataset → {out_path}")
 print(f"Total samples: {len(merged['labels'])}")
 
-data = torch.load("5. Dementia Model/precomputed_all.pt")
+data = torch.load(f"{MAIN_FOLDER}/precomputed_all.pt")
 print(data["spectros"].shape)
 print(data["input_ids"].shape)
 print(data["labels"].shape)
