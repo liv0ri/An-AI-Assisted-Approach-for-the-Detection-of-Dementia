@@ -5,7 +5,7 @@ from PIL import Image
 from transformers import AutoTokenizer
 from torchvision import transforms
 import csv
-from config import output_dir, test_csv_name
+from config import MAIN_FOLDER, OUTPUT_DIR, TEST_CSV_NAME
 
 def preprocess_multimodal_split(
     spectro_dir,
@@ -16,9 +16,8 @@ def preprocess_multimodal_split(
     labels_csv=None,
     max_length=256
 ):
-    output_dir = "5. Dementia Model"
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, output_path)
+    os.makedirs(MAIN_FOLDER, exist_ok=True)
+    output_path = os.path.join(MAIN_FOLDER, output_path)
 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
@@ -128,23 +127,23 @@ def preprocess_multimodal_split(
     print(f"Saved precomputed data to → {output_path}")
 
 preprocess_multimodal_split(
-    spectro_dir=f'{output_dir}/train/specto/',
-    trans_dir=f'{output_dir}/train/trans/',
+    spectro_dir=f'{OUTPUT_DIR}/train/specto/',
+    trans_dir=f'{OUTPUT_DIR}/train/trans/',
     output_path='precomputed_train.pt',
     label_map={"ad": 1, "cn": 0}
 )
 
 preprocess_multimodal_split(
-    spectro_dir=f'{output_dir}/val/specto/',
-    trans_dir=f'{output_dir}/val/trans/',
+    spectro_dir=f'{OUTPUT_DIR}/val/specto/',
+    trans_dir=f'{OUTPUT_DIR}/val/trans/',
     output_path='precomputed_val.pt',
     label_map={"ad": 1, "cn": 0}
 )
 
 preprocess_multimodal_split(
-    spectro_dir=f'{output_dir}/test-distspecto/',
-    trans_dir=f'{output_dir}/test-disttrans/',
+    spectro_dir=f'{OUTPUT_DIR}/test-distspecto/',
+    trans_dir=f'{OUTPUT_DIR}/test-disttrans/',
     output_path='precomputed_test.pt',
-    labels_csv=f'{output_dir}/test-dist/{test_csv_name}',
+    labels_csv=f'{OUTPUT_DIR}/test-dist/{TEST_CSV_NAME}',
     label_map={"Control": 0, "ProbableAD": 1}
 )
