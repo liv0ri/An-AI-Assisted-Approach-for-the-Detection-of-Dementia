@@ -5,9 +5,11 @@ import torch.nn as nn
 import numpy as np
 import os
 from tqdm import tqdm
-from cached_adresso_dataset import adresso_loader 
+from cached_adresso_dataset import CachedAdressoDataset, adresso_loader, variable_batcher 
 from bert_image import BertImage 
 import argparse
+from sklearn.model_selection import StratifiedKFold
+from torch.utils.data import DataLoader, Subset
 
 class Trainer:
   def __init__(self, args): 
@@ -20,8 +22,8 @@ class Trainer:
     torch.cuda.manual_seed(args.seed) # Sets the seed for PyTorch's CUDA random number generator for reproducibility.
     np.random.seed(args.seed) # Sets the seed for NumPy's random number generator for reproducibility.
 
-    train_loader = adresso_loader(phase='train', batch_size=args.batch_size) 
-    test_loader = adresso_loader(phase='test', batch_size=args.val_batch_size) 
+    # train_loader = adresso_loader(phase='train', batch_size=args.batch_size) 
+    # test_loader = adresso_loader(phase='test', batch_size=args.val_batch_size) 
 
     if torch.cuda.device_count() > 0:
       print(f"{torch.cuda.device_count()} GPUs found") 
@@ -37,11 +39,12 @@ class Trainer:
     self.model = model # Stores the initialized model as an instance variable.
     self.optimizer = optimizer # Stores the optimizer as an instance variable.
     self.binary_cross = nn.BCELoss() # Initializes the Binary Cross-Entropy Loss function, suitable for binary classification problems.
-    self.train_loader = train_loader # Stores the training data loader.
-    self.test_loader = test_loader # Stores the test data loader.
+    self.train_loader = None # Stores the training data loader.
+    self.test_loader = None # Stores the test data loader.
     self.args = args # Stores the arguments object for easy access to configuration.
     self.epoch_accuracies = [] 
     self.all_losses = [] 
+
   def train(self): 
     best_acc = 0.0
     best_epoch = 0 # Initializes a variable to track the epoch with the best performance.
@@ -129,6 +132,51 @@ class Trainer:
     print(f"Final Test Accuracy: {final_acc:.3f}")
     cm = confusion_matrix(label_true, label_pred)
     print("Confusion Matrix:\n", cm)
+    
+def run_cv(args):
+  dataset = CachedAdressoDataset(phase="all")
+  labels = dataset.labels.cpu().numpy()
+
+  skf = StratifiedKFold(
+      n_splits=args.n_folds,
+      shuffle=True,
+      random_state=args.seed
+  )
+
+  for fold, (train_idx, val_idx) in enumerate(skf.split(labels, labels)):
+      print(f"\n========== Fold {fold+1}/{args.n_folds} ==========")
+
+      train_set = Subset(dataset, train_idx)
+      val_set   = Subset(dataset, val_idx)
+
+      train_loader = DataLoader(
+          train_set,
+          batch_size=args.batch_size,
+          shuffle=True,
+          collate_fn=variable_batcher,
+          num_workers=4,
+          pin_memory=True
+      )
+
+      val_loader = DataLoader(
+          val_set,
+          batch_size=args.val_batch_size,
+          shuffle=False,
+          collate_fn=variable_batcher,
+          num_workers=4,
+          pin_memory=True
+      )
+
+      engine = Trainer(args)
+      engine.train_loader = train_loader
+      engine.test_loader  = val_loader
+
+      engine.train()
+
+      torch.save(
+          engine.model.state_dict(),
+          f"saved_models/fold_{fold+1}.pth"
+      )
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser() # Creates an ArgumentParser object to define command-line arguments.
@@ -139,8 +187,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=3e-5) # Adds an argument for the learning rate.
     parser.add_argument('--nfinetune', type=int, default=48) # Adds an argument for the number of BERT layers to fine-tune.
     parser.add_argument('--seed', type=int, default=0) # Adds an argument for the random seed.
+    parser.add_argument('--n_folds', type=int, default=5) # Adds an argument for the number of folds for cross-validation.
     args = parser.parse_args() # Parses the command-line arguments provided by the user.
 
-    engine = Trainer(args) # Creates an instance of the Trainer class, passing the parsed arguments.
-    engine.train() # Starts the training process by calling the train method of the Trainer instance.
-    engine.test()
+    run_cv(args) # Calls the run_cv function to perform cross-validation training and evaluation.
