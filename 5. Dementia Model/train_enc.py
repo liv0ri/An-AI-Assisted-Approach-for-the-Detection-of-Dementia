@@ -1,11 +1,11 @@
 from torch.optim import AdamW
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, f1_score
 import torch
 import torch.nn as nn
 import numpy as np
 import os
 from tqdm import tqdm
-from cached_adresso_dataset import CachedAdressoDataset, adresso_loader, variable_batcher 
+from cached_adresso_dataset import CachedAdressoDataset, variable_batcher 
 from bert_image import BertImage 
 import argparse
 from sklearn.model_selection import StratifiedGroupKFold
@@ -22,9 +22,6 @@ class Trainer:
     torch.cuda.manual_seed(args.seed) # Sets the seed for PyTorch's CUDA random number generator for reproducibility.
     np.random.seed(args.seed) # Sets the seed for NumPy's random number generator for reproducibility.
 
-    # train_loader = adresso_loader(phase='train', batch_size=args.batch_size) 
-    # test_loader = adresso_loader(phase='test', batch_size=args.val_batch_size) 
-
     if torch.cuda.device_count() > 0:
       print(f"{torch.cuda.device_count()} GPUs found") 
 
@@ -40,27 +37,27 @@ class Trainer:
     self.optimizer = optimizer # Stores the optimizer as an instance variable.
     self.binary_cross = nn.BCELoss() # Initializes the Binary Cross-Entropy Loss function, suitable for binary classification problems.
     self.train_loader = None # Stores the training data loader.
-    self.test_loader = None # Stores the test data loader.
+    self.val_loader = None # Stores the validation data loader.
     self.args = args # Stores the arguments object for easy access to configuration.
     self.epoch_accuracies = [] 
     self.all_losses = [] 
 
   def train(self): 
-    best_acc = 0.0
+    best_f1 = 0.0
     best_epoch = 0 # Initializes a variable to track the epoch with the best performance.
     for epoch in range(self.args.epochs): # Loops through the specified number of training epochs.
       print(f"{'*' * 20}Epoch: {epoch + 1}{'*' * 20}") # Prints a separator for the current epoch.
       loss = self.train_epoch() 
-      binary_acc, _, _ = self.eval() # Calls the eval method to evaluate the model on the test set and gets the binary classification accuracy.
+      _, _, _, label_f1 = self.eval() # Calls the eval method to evaluate the model on the test set and gets the auc.
       print(f"Epoch {epoch + 1} Loss: {loss:.3f}") # Prints the average loss for the current epoch.
-      print(f'Binary Acc: {binary_acc:.3f}') # Prints the binary classification accuracy for the current epoch.
-      self.epoch_accuracies.append(round(binary_acc, 3)) # Appends the rounded binary accuracy to the list of epoch accuracies.
+      print(f'Macro F1 Score: {label_f1:.3f}') 
+      self.epoch_accuracies.append(round(label_f1, 3)) # Appends the rounded binary accuracy to the list of epoch accuracies.
       
-      if binary_acc > best_acc:
-            best_acc = binary_acc
+      if label_f1 > best_f1:
+            best_f1 = label_f1
             best_epoch = epoch + 1
             torch.save(self.model.state_dict(), f'saved_models/best_model.pth')
-            print(f" Saved new best model at epoch {best_epoch} with acc {best_acc:.3f}")
+            print(f" Saved new best model at epoch {best_epoch} with f1 {best_f1:.3f}")
       
     with open("epoch_acc.txt", "w") as ofile:
       for num, eacc in enumerate(self.epoch_accuracies): # Iterates through recorded epoch accuracies.
@@ -103,7 +100,7 @@ class Trainer:
     label_pred = [] # Initializes an empty list to store predicted labels.
     label_true = [] # Initializes an empty list to store true labels.
     
-    loader = self.test_loader # Uses the test data loader for evaluation. 
+    loader = self.val_loader # Uses the test data loader for evaluation. 
 
     with torch.no_grad(): # Disables gradient calculations. This is crucial during evaluation to save memory and computation, as we don't need to update model weights.
       for _, batch in enumerate(loader): # Iterates through batches from the test data loader.
@@ -121,15 +118,15 @@ class Trainer:
     print(label_true, "true labels") 
     print(label_pred, "pred labels")
     
-    label_acc = accuracy_score(label_true, label_pred) # Calculates the overall accuracy score.
+    label_f1 = f1_score(label_true, label_pred, average='macro') # Calculates the macro F1 score.
     target_names = ['NonDementia', 'Dementia'] # Defines the names for the target classes for the classification report.
     print(classification_report(label_true, label_pred, target_names=target_names))
-    return label_acc, label_true, label_pred 
+    return label_true, label_pred, label_f1
   
   def test(self):
     self.model.load_state_dict(torch.load('saved_models/best_model.pth'))
-    final_acc, label_true, label_pred = self.eval()
-    print(f"Final Test Accuracy: {final_acc:.3f}")
+    label_true, label_pred, label_f1 = self.eval()
+    print(f"Final Test F1 Score: {label_f1:.3f}")
     cm = confusion_matrix(label_true, label_pred)
     print("Confusion Matrix:\n", cm)
     
@@ -176,7 +173,7 @@ def run_cv(args):
 
       engine = Trainer(args)
       engine.train_loader = train_loader
-      engine.test_loader  = val_loader
+      engine.val_loader  = val_loader
 
       engine.train()
 
