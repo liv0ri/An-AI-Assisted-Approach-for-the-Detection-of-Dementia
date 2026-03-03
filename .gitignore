@@ -8,3 +8,4 @@ saved_models/
 ckp/
 precomputed_train.pt
 precomputed_all.pt
+precomputed_adresso.pt

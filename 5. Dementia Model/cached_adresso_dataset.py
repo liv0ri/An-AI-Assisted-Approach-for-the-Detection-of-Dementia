@@ -11,7 +11,8 @@ CACHE_FILES = {
     "all": "precomputed_all.pt", 
     "train": "precomputed_train.pt",
     "val": "precomputed_val.pt",  
-    "test": "precomputed_test.pt"
+    "test": "precomputed_test.pt",
+    "adresso": "precomputed_adresso.pt"
 }
 
 class CachedAdressoDataset(Dataset):
@@ -48,7 +49,10 @@ class CachedAdressoDataset(Dataset):
         subject_ids = []
 
         for fname in file_names:
-            match = re.search(r'\b(\d{3})\b', fname)
+            # This finds all digits in the filename, regardless of position
+            # 'adrsdt1.png' -> '1'
+            # 'adrso024.wav' -> '024'
+            match = re.search(r'(\d+)', fname)
             if match is None:
                 raise ValueError(f"Cannot extract subject ID from filename: {fname}")
 

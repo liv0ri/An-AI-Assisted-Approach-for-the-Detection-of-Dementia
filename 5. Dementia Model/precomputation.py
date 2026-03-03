@@ -5,7 +5,7 @@ from PIL import Image
 from transformers import AutoTokenizer
 from torchvision import transforms
 import csv
-from config import MAIN_FOLDER, OUTPUT_DIR, TEST_CSV_NAME
+from config import EVALUATION_FOLDER, MAIN_FOLDER, OUTPUT_DIR, TEST_CSV_NAME
 
 def preprocess_multimodal_split(
     spectro_dir,
@@ -145,5 +145,13 @@ preprocess_multimodal_split(
     trans_dir=f'{OUTPUT_DIR}/test-disttrans/',
     output_path='precomputed_test.pt',
     labels_csv=f'{OUTPUT_DIR}/test-dist/{TEST_CSV_NAME}',
+    label_map={"Control": 0, "ProbableAD": 1}
+)
+
+preprocess_multimodal_split(
+    spectro_dir=f'{EVALUATION_FOLDER}/adresso_corpus/test-distspecto/',
+    trans_dir=f'{EVALUATION_FOLDER}/adresso_corpus/test-disttrans/',
+    output_path='precomputed_adresso.pt',
+    labels_csv=f'{EVALUATION_FOLDER}/adresso_corpus/test-dist/{TEST_CSV_NAME}',
     label_map={"Control": 0, "ProbableAD": 1}
 )
