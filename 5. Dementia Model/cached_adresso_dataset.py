@@ -2,6 +2,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer
 import os
+import re
+import numpy as np
 
 tokenizer = AutoTokenizer.from_pretrained('FacebookAI/roberta-base')
 
@@ -27,6 +29,8 @@ class CachedAdressoDataset(Dataset):
         self.file_names = data['file_names']
         self.raw_texts = data['raw_texts'] 
 
+        self.subject_ids = self._extract_subject_ids(self.file_names)
+
     def __getitem__(self, idx):
         return {
             'pixels': self.spectros[idx],
@@ -39,6 +43,18 @@ class CachedAdressoDataset(Dataset):
 
     def __len__(self):
         return len(self.labels)
+    
+    def _extract_subject_ids(self, file_names):
+        subject_ids = []
+
+        for fname in file_names:
+            match = re.search(r'\b(\d{3})\b', fname)
+            if match is None:
+                raise ValueError(f"Cannot extract subject ID from filename: {fname}")
+
+            subject_ids.append(int(match.group(1)))
+
+        return np.array(subject_ids)
 
 def variable_batcher(batch):
     out = {
@@ -63,3 +79,8 @@ def adresso_loader(phase, batch_size, base_path=""):
         num_workers=4,
         pin_memory=True
     )
+
+
+# dataset = CachedAdressoDataset("all")
+# print("Samples:", len(dataset))
+# print("Unique subjects:", len(np.unique(dataset.subject_ids)))

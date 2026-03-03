@@ -8,7 +8,7 @@ from tqdm import tqdm
 from cached_adresso_dataset import CachedAdressoDataset, adresso_loader, variable_batcher 
 from bert_image import BertImage 
 import argparse
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedGroupKFold
 from torch.utils.data import DataLoader, Subset
 
 class Trainer:
@@ -136,15 +136,22 @@ class Trainer:
 def run_cv(args):
   dataset = CachedAdressoDataset(phase="all")
   labels = dataset.labels.cpu().numpy()
+  groups = np.array(dataset.subject_ids)
 
-  skf = StratifiedKFold(
+  sgkf = StratifiedGroupKFold(
       n_splits=args.n_folds,
       shuffle=True,
       random_state=args.seed
   )
 
-  for fold, (train_idx, val_idx) in enumerate(skf.split(labels, labels)):
+  for fold, (train_idx, val_idx) in enumerate(
+      sgkf.split(X=np.zeros(len(labels)), y=labels, groups=groups)
+  ):
       print(f"\n========== Fold {fold+1}/{args.n_folds} ==========")
+
+      torch.manual_seed(args.seed + fold)
+      torch.cuda.manual_seed_all(args.seed + fold)
+      np.random.seed(args.seed + fold)
 
       train_set = Subset(dataset, train_idx)
       val_set   = Subset(dataset, val_idx)
