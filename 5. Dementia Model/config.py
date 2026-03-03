@@ -12,3 +12,4 @@ MODALITIES = ["wav", "specto", "trans"]
 ORIGINAL_CLASSES = ["control", "dementia"]
 CLASS_MAP = {"control": "cn", "dementia": "ad"}
 TEST_CSV_NAME = "task1.csv"
+EVALUATION_FOLDER = "6. Evaluation"

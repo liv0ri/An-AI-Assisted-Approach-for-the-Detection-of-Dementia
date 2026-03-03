@@ -2,6 +2,7 @@ specto/
 trans/
 wav/
 diagnosis/
+6. Evaluation/adresso_corpus/
 __pycache__/
 saved_models/
 ckp/
