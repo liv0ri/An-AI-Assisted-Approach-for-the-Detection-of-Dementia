@@ -8,6 +8,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 import argparse
 from bert_image import BertImage
 from data_loader_vit import adresso_loader
+# from focal_loss import FocalLossMultiClass
 
 class Trainer:
     def __init__(self, args):
@@ -43,6 +44,23 @@ class Trainer:
         
         self.train_loader = train_loader
         self.test_loader = test_loader
+
+        # Compute class weights automatically - uncomment for Focal LOSS
+        # mmse_labels = []
+        # for batch in train_loader:
+        #     mmse_labels.extend(batch["mmse_scores"].numpy())
+        # mmse_labels = np.array(mmse_labels)
+        # counts = np.bincount(mmse_labels, minlength=4)
+        # print("MMSE class counts:", counts)
+        # total = counts.sum()
+        # weights = total / (4 * counts)
+        # alpha = torch.tensor(weights, dtype=torch.float).to(device)
+        # print("Computed alpha:", alpha)
+        # self.multi_class_loss = FocalLossMultiClass(
+        #     gamma=2,
+        #     alpha=alpha
+        # )
+        
         self.args = args
         self.epoch_accuracies = []
         self.all_losses = []
