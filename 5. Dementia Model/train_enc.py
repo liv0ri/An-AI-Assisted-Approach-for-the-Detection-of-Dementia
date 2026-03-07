@@ -48,7 +48,7 @@ class Trainer:
     for epoch in range(self.args.epochs): # Loops through the specified number of training epochs.
       print(f"{'*' * 20}Epoch: {epoch + 1}{'*' * 20}") # Prints a separator for the current epoch.
       loss = self.train_epoch() 
-      _, _, _, label_f1 = self.eval() # Calls the eval method to evaluate the model on the test set and gets the auc.
+      _, _, label_f1 = self.eval() # Calls the eval method to evaluate the model on the test set and gets the auc.
       print(f"Epoch {epoch + 1} Loss: {loss:.3f}") # Prints the average loss for the current epoch.
       print(f'Macro F1 Score: {label_f1:.3f}') 
       self.epoch_accuracies.append(round(label_f1, 3)) # Appends the rounded binary accuracy to the list of epoch accuracies.
