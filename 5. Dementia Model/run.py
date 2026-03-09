@@ -11,6 +11,9 @@ from config import (
     N_FOLDS,
 )
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 command = [

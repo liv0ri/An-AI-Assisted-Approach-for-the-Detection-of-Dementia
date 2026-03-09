@@ -1,7 +1,7 @@
 import csv
-
+import pandas as pd
 from torch.optim import AdamW
-from sklearn.metrics import classification_report, confusion_matrix, f1_score
+from sklearn.metrics import classification_report, confusion_matrix, f1_score, roc_auc_score
 import torch
 import torch.nn as nn
 import numpy as np
@@ -17,7 +17,7 @@ from captum.attr import IntegratedGradients, LayerIntegratedGradients
 import matplotlib.pyplot as plt
 
 class Trainer:
-  def __init__(self, args): 
+  def __init__(self, args, fold): 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu' 
     os.makedirs('ckp', exist_ok=True) 
@@ -26,6 +26,8 @@ class Trainer:
     torch.manual_seed(args.seed) # Sets the seed for PyTorch's CPU random number generator for reproducibility.
     torch.cuda.manual_seed(args.seed) # Sets the seed for PyTorch's CUDA random number generator for reproducibility.
     np.random.seed(args.seed) # Sets the seed for NumPy's random number generator for reproducibility.
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
     if torch.cuda.device_count() > 0:
       print(f"{torch.cuda.device_count()} GPUs found") 
@@ -66,22 +68,21 @@ class Trainer:
       _, _, label_f1 = self.eval() # Calls the eval method to evaluate the model on the test set and gets the auc.
       print(f'Macro F1 Score: {label_f1:.3f}')
 
-      # Generate XAI on a few validation samples
-      self.xai_step(epoch=epoch, num_samples=3)
       print(f"Epoch {epoch + 1} Loss: {loss:.3f}") # Prints the average loss for the current epoch.
       print(f'Macro F1 Score: {label_f1:.3f}') 
       self.epoch_accuracies.append(round(label_f1, 3)) # Appends the rounded binary accuracy to the list of epoch accuracies.
       
       if label_f1 > best_f1:
+            self.xai_step(epoch=epoch, num_samples=3)
             best_f1 = label_f1
             best_epoch = epoch + 1
             torch.save(self.model.module.state_dict(), f'saved_models/best_model.pth')
             print(f" Saved new best model at epoch {best_epoch} with f1 {best_f1:.3f}")
       
-    with open("epoch_acc.txt", "w") as ofile:
+    with open(f"epoch_acc_fold{self.fold}.txt", "w") as ofile:
       for num, eacc in enumerate(self.epoch_accuracies): # Iterates through recorded epoch accuracies.
         ofile.write(f"Epoch {num + 1} accuracy: {eacc}\n") # Writes each accuracy to the file, followed by a newline.
-    with open("losses.txt", "w") as ofile:
+    with open(f"losses_fold{self.fold}.txt", "w") as ofile:
       for num, eloss in enumerate(self.all_losses): # Iterates through all recorded batch losses.
         ofile.write(f"Epoch {num+1} loss: {eloss} \n") # Writes each loss to the file.
 
@@ -113,6 +114,9 @@ class Trainer:
             self.all_losses.append(lloss) # Appends the rounded batch loss to the list of all losses.
         epoch_loss += loss.item() # Accumulates the loss for the current epoch.
     return epoch_loss / len(self.train_loader) # Returns the average loss for the epoch.
+  
+  def text_forward(self, input_ids, pixels, attention_mask):
+    return self.model(pixels, input_ids, attention_mask)
   
   def xai_step(self, epoch, num_samples=5):
     self.model.eval()
@@ -159,9 +163,9 @@ class Trainer:
             plt.title(f"Expected={labels[i]}, Predicted={pred_label}")
             plt.axis('off')
             plt.savefig(
-                f"xai/ig_sample{count}_true{labels[i]}_pred{pred_label}.png",
-                bbox_inches="tight",
-                pad_inches=0
+              f"xai/fold{self.fold}_epoch{epoch}_sample{count}_true{labels[i]}_pred{pred_label}.png",
+              bbox_inches="tight",
+              pad_inches=0
             )
             plt.close()
 
@@ -177,13 +181,10 @@ class Trainer:
             token_attr = token_attr.sum(dim=-1).squeeze().cpu().detach().numpy()
             token_attr = (token_attr - token_attr.min()) / (token_attr.max() - token_attr.min() + 1e-8)
 
-            tokens = batch["input_ids"][i].cpu().tolist()
-            tokens = [str(t) for t in tokens]
-
             token_scores = list(zip(tokens, token_attr))
             token_scores = sorted(token_scores, key=lambda x: x[1], reverse=True)
 
-            with open(f"xai/epoch{epoch}_tokens_sample{count}.csv", "w") as f:
+            with open(f"xai/fold{self.fold}_epoch{epoch}_tokens_sample{count}.csv", "w") as f:
               writer = csv.writer(f)
               writer.writerow(["token","importance"])
               writer.writerows(token_scores)
@@ -195,10 +196,10 @@ class Trainer:
     label_pred = [] # Initializes an empty list to store predicted labels.
     label_true = [] # Initializes an empty list to store true labels.
     
-    loader = self.val_loader # Uses the test data loader for evaluation. 
+    loader = self.val_loader # Uses the val data loader for evaluation. 
 
     with torch.no_grad(): # Disables gradient calculations. This is crucial during evaluation to save memory and computation, as we don't need to update model weights.
-      for _, batch in enumerate(loader): # Iterates through batches from the test data loader.
+      for _, batch in enumerate(loader): # Iterates through batches from the val data loader.
         pixels = batch['pixels'].to(self.device) # Moves spectrograms to device.
         input_ids = batch["input_ids"].to(self.device) # Moves input IDs to device.
         attention_mask = batch["attention_mask"].to(self.device) # Moves attention mask to device.
@@ -206,7 +207,7 @@ class Trainer:
         
         label_preds = self.model(pixels, input_ids, attention_mask) # Performs a forward pass to get predicted probabilities.
         
-        label_pred += label_preds.detach().to('cpu').flatten().round().long().tolist() # Detaches predictions from computation graph, moves to CPU, flattens, rounds to the nearest integer, converts to long, and then to a Python list.
+        label_probs += label_preds.detach().cpu().flatten().tolist()
         labels = labels.reshape(-1) # Reshapes true labels to 1D.
         label_true += labels.detach().to('cpu').tolist() # Detaches true labels, moves to CPU, and converts to a Python list.
         
