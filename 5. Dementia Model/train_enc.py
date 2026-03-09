@@ -1,3 +1,5 @@
+import csv
+
 from torch.optim import AdamW
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
 import torch
@@ -5,11 +7,14 @@ import torch.nn as nn
 import numpy as np
 import os
 from tqdm import tqdm
+from transformers import AutoTokenizer
 from cached_adresso_dataset import CachedAdressoDataset, variable_batcher 
 from bert_image import BertImage 
 import argparse
 from sklearn.model_selection import StratifiedGroupKFold
 from torch.utils.data import DataLoader, Subset
+from captum.attr import IntegratedGradients, LayerIntegratedGradients
+import matplotlib.pyplot as plt
 
 class Trainer:
   def __init__(self, args): 
@@ -41,6 +46,16 @@ class Trainer:
     self.args = args # Stores the arguments object for easy access to configuration.
     self.epoch_accuracies = [] 
     self.all_losses = [] 
+    self.tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
+
+    # Integrated Gradients
+    self.ig_audio = IntegratedGradients(self.model)
+
+    self.lig_text = LayerIntegratedGradients(
+        self.model,
+        self.model.module.bert.embeddings
+    )
+    os.makedirs("xai", exist_ok=True)  # folder to save IG images
 
   def train(self): 
     best_f1 = 0.0
@@ -49,6 +64,10 @@ class Trainer:
       print(f"{'*' * 20}Epoch: {epoch + 1}{'*' * 20}") # Prints a separator for the current epoch.
       loss = self.train_epoch() 
       _, _, label_f1 = self.eval() # Calls the eval method to evaluate the model on the test set and gets the auc.
+      print(f'Macro F1 Score: {label_f1:.3f}')
+
+      # Generate XAI on a few validation samples
+      self.xai_step(epoch=epoch, num_samples=3)
       print(f"Epoch {epoch + 1} Loss: {loss:.3f}") # Prints the average loss for the current epoch.
       print(f'Macro F1 Score: {label_f1:.3f}') 
       self.epoch_accuracies.append(round(label_f1, 3)) # Appends the rounded binary accuracy to the list of epoch accuracies.
@@ -56,7 +75,7 @@ class Trainer:
       if label_f1 > best_f1:
             best_f1 = label_f1
             best_epoch = epoch + 1
-            torch.save(self.model.state_dict(), f'saved_models/best_model.pth')
+            torch.save(self.model.module.state_dict(), f'saved_models/best_model.pth')
             print(f" Saved new best model at epoch {best_epoch} with f1 {best_f1:.3f}")
       
     with open("epoch_acc.txt", "w") as ofile:
@@ -94,6 +113,82 @@ class Trainer:
             self.all_losses.append(lloss) # Appends the rounded batch loss to the list of all losses.
         epoch_loss += loss.item() # Accumulates the loss for the current epoch.
     return epoch_loss / len(self.train_loader) # Returns the average loss for the epoch.
+  
+  def xai_step(self, epoch, num_samples=5):
+    self.model.eval()
+    count = 0
+
+    for batch in self.val_loader:
+        pixels = batch['pixels'].to(self.device)
+        input_ids = batch['input_ids'].to(self.device)
+        attention_mask = batch['attention_mask'].to(self.device)
+        labels = batch['labels']
+
+        for i in range(len(labels)):
+            if count >= num_samples:
+                return  
+
+            pixel_input = pixels[i:i+1]
+            token_ids = batch["input_ids"][i].cpu().tolist()
+            tokens = self.tokenizer.convert_ids_to_tokens(token_ids)
+
+            baseline_pixels = torch.zeros_like(pixel_input).to(self.device)
+
+            attributions = self.ig_audio.attribute(
+                pixel_input,
+                baselines=baseline_pixels,
+                additional_forward_args=(input_ids[i:i+1], attention_mask[i:i+1]),
+                n_steps=50
+            )
+
+            attr = attributions.squeeze().cpu().detach().numpy()
+            attr = np.mean(np.abs(attr), axis=0)  # combine channels
+            attr = (attr - attr.min()) / (attr.max() - attr.min() + 1e-8)
+
+            orig = pixels[i].cpu().permute(1,2,0).numpy()
+            orig = (orig - orig.min()) / (orig.max() - orig.min() + 1e-8)
+
+            plt.figure(figsize=(6,6))
+            plt.imshow(orig, aspect='auto')
+            plt.imshow(attr, cmap='hot', alpha=0.5, aspect='auto')
+
+            with torch.no_grad():
+              pred = self.model(pixel_input, input_ids[i:i+1], attention_mask[i:i+1])
+              pred_label = int(pred.item() >= 0.5)
+
+            plt.title(f"Expected={labels[i]}, Predicted={pred_label}")
+            plt.axis('off')
+            plt.savefig(
+                f"xai/ig_sample{count}_true{labels[i]}_pred{pred_label}.png",
+                bbox_inches="tight",
+                pad_inches=0
+            )
+            plt.close()
+
+            baseline_ids = torch.zeros_like(input_ids[i:i+1]).to(self.device)
+
+            token_attr = self.lig_text.attribute(
+                inputs=input_ids[i:i+1],
+                baselines=baseline_ids,
+                additional_forward_args=(pixel_input, attention_mask[i:i+1]),
+                n_steps=50
+            )
+
+            token_attr = token_attr.sum(dim=-1).squeeze().cpu().detach().numpy()
+            token_attr = (token_attr - token_attr.min()) / (token_attr.max() - token_attr.min() + 1e-8)
+
+            tokens = batch["input_ids"][i].cpu().tolist()
+            tokens = [str(t) for t in tokens]
+
+            token_scores = list(zip(tokens, token_attr))
+            token_scores = sorted(token_scores, key=lambda x: x[1], reverse=True)
+
+            with open(f"xai/epoch{epoch}_tokens_sample{count}.csv", "w") as f:
+              writer = csv.writer(f)
+              writer.writerow(["token","importance"])
+              writer.writerows(token_scores)
+            
+            count += 1
 
   def eval(self):
     self.model.eval() # Sets the model to evaluation mode. This disables dropout and ensures batch normalization uses running means/variances.
@@ -178,7 +273,7 @@ def run_cv(args):
       engine.train()
 
       torch.save(
-          engine.model.state_dict(),
+          engine.model.module.state_dict(),
           f"saved_models/fold_{fold+1}.pth"
       )
 
