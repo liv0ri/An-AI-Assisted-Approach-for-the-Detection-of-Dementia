@@ -49,12 +49,14 @@ class Trainer:
     self.epoch_accuracies = [] 
     self.all_losses = [] 
     self.tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
+    self.fold = fold
+    self.best_threshold = 0.5
 
     # Integrated Gradients
-    self.ig_audio = IntegratedGradients(self.model)
+    self.ig_audio = IntegratedGradients(self.model.module)
 
     self.lig_text = LayerIntegratedGradients(
-        self.model,
+        self.text_forward,
         self.model.module.bert.embeddings
     )
     os.makedirs("xai", exist_ok=True)  # folder to save IG images
@@ -65,7 +67,7 @@ class Trainer:
     for epoch in range(self.args.epochs): # Loops through the specified number of training epochs.
       print(f"{'*' * 20}Epoch: {epoch + 1}{'*' * 20}") # Prints a separator for the current epoch.
       loss = self.train_epoch() 
-      _, _, label_f1 = self.eval() # Calls the eval method to evaluate the model on the test set and gets the auc.
+      _, _, label_f1, _ = self.eval() # Calls the eval method to evaluate the model on the val set and gets the auc.
       print(f'Macro F1 Score: {label_f1:.3f}')
 
       print(f"Epoch {epoch + 1} Loss: {loss:.3f}") # Prints the average loss for the current epoch.
@@ -76,7 +78,10 @@ class Trainer:
             self.xai_step(epoch=epoch, num_samples=3)
             best_f1 = label_f1
             best_epoch = epoch + 1
-            torch.save(self.model.module.state_dict(), f'saved_models/best_model.pth')
+            torch.save(
+                self.model.state_dict(),
+                f'saved_models/best_model_fold{self.fold}.pth'
+            )
             print(f" Saved new best model at epoch {best_epoch} with f1 {best_f1:.3f}")
       
     with open(f"epoch_acc_fold{self.fold}.txt", "w") as ofile:
@@ -193,7 +198,7 @@ class Trainer:
 
   def eval(self):
     self.model.eval() # Sets the model to evaluation mode. This disables dropout and ensures batch normalization uses running means/variances.
-    label_pred = [] # Initializes an empty list to store predicted labels.
+    label_probs = []
     label_true = [] # Initializes an empty list to store true labels.
     
     loader = self.val_loader # Uses the val data loader for evaluation. 
