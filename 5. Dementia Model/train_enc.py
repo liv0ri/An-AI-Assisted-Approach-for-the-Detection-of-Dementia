@@ -215,26 +215,41 @@ class Trainer:
         label_probs += label_preds.detach().cpu().flatten().tolist()
         labels = labels.reshape(-1) # Reshapes true labels to 1D.
         label_true += labels.detach().to('cpu').tolist() # Detaches true labels, moves to CPU, and converts to a Python list.
+
+      thresholds = np.linspace(0.05, 0.95, 50)
+      best_f1 = 0
+      best_preds = None
+
+      for t in thresholds:
+          preds = [1 if p >= t else 0 for p in label_probs]
+          f1 = f1_score(label_true, preds, average='macro')
+
+          if f1 > best_f1:
+              best_f1 = f1
+              self.best_threshold = t
+              best_preds = preds
+
+      print(f"Best Threshold: {self.best_threshold:.2f}")
         
     print(label_true, "true labels") 
-    print(label_pred, "pred labels")
-    
-    label_f1 = f1_score(label_true, label_pred, average='macro') # Calculates the macro F1 score.
+    print(best_preds, "best preds")
+
+    label_f1 = best_f1
     target_names = ['NonDementia', 'Dementia'] # Defines the names for the target classes for the classification report.
-    print(classification_report(label_true, label_pred, target_names=target_names))
-    return label_true, label_pred, label_f1
-  
-  def test(self):
-    self.model.load_state_dict(torch.load('saved_models/best_model.pth'))
-    label_true, label_pred, label_f1 = self.eval()
-    print(f"Final Test F1 Score: {label_f1:.3f}")
-    cm = confusion_matrix(label_true, label_pred)
+    print(classification_report(label_true, best_preds, target_names=target_names))
+    roc = roc_auc_score(label_true, label_probs)
+    print(f"ROC-AUC: {roc:.3f}")
+
+    cm = confusion_matrix(label_true, best_preds)
     print("Confusion Matrix:\n", cm)
+    return label_true, best_preds, label_f1, roc
     
 def run_cv(args):
+  cv_results = []
   dataset = CachedAdressoDataset(phase="all")
   labels = dataset.labels.cpu().numpy()
   groups = np.array(dataset.subject_ids)
+  fold_scores = []
 
   sgkf = StratifiedGroupKFold(
       n_splits=args.n_folds,
@@ -272,16 +287,27 @@ def run_cv(args):
           pin_memory=True
       )
 
-      engine = Trainer(args)
+      engine = Trainer(args, fold+1)
       engine.train_loader = train_loader
       engine.val_loader  = val_loader
 
       engine.train()
 
-      torch.save(
-          engine.model.module.state_dict(),
-          f"saved_models/fold_{fold+1}.pth"
-      )
+      print(f"Fold {fold+1} best threshold: {engine.best_threshold:.2f}")
+      _, _, f1, roc_auc = engine.eval()
+
+      fold_scores.append(f1)
+      cv_results.append({
+        "fold": fold+1,
+        "f1": f1,
+        "roc_auc": roc_auc,
+        "threshold": engine.best_threshold
+      })
+
+  pd.DataFrame(cv_results).to_csv("cv_results.csv", index=False)
+  print("\n===== Cross Validation Results =====")
+  print(f"Mean F1: {np.mean(fold_scores):.3f}")
+  print(f"Std F1: {np.std(fold_scores):.3f}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser() # Creates an ArgumentParser object to define command-line arguments.
