@@ -52,12 +52,14 @@ class Trainer:
     self.fold = fold
     self.best_threshold = 0.5
 
+    model_ref = self.model.module if isinstance(self.model, nn.DataParallel) else self.model
+
     # Integrated Gradients
-    self.ig_audio = IntegratedGradients(self.model.module)
+    self.ig_audio = IntegratedGradients(model_ref)
 
     self.lig_text = LayerIntegratedGradients(
         self.text_forward,
-        self.model.module.bert.embeddings
+        model_ref.bert.embeddings
     )
     os.makedirs("xai", exist_ok=True)  # folder to save IG images
 
